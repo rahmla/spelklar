@@ -4,18 +4,23 @@ import { LoginPage } from './pages/LoginPage'
 import { StudentHome } from './pages/StudentHome'
 import { CheckInPage } from './pages/CheckInPage'
 import { SchedulePage } from './pages/SchedulePage'
+import { LogPage } from './pages/LogPage'
 import { InjuryPage } from './pages/InjuryPage'
 import { TrainingLoadPage } from './pages/TrainingLoadPage'
+import { ProfilePage } from './pages/ProfilePage'
 import { CoachDashboard } from './pages/CoachDashboard'
+import { CoachPlanPage } from './pages/CoachPlanPage'
 import { BottomNav } from './components/BottomNav'
+import type { StudentTab, CoachTab } from './components/BottomNav'
 
-type StudentTab = 'home' | 'checkin' | 'schedule' | 'load' | 'injury'
-type CoachTab = 'students' | 'schedule'
+// Students can also be in sub-views 'load' or 'injury' (no tab)
+type StudentView = StudentTab | 'load' | 'injury'
+type CoachView   = CoachTab
 
 export default function App() {
   const { user, profile, loading, signOut } = useAuth()
-  const [studentTab, setStudentTab] = useState<StudentTab>('home')
-  const [coachTab, setCoachTab] = useState<CoachTab>('students')
+  const [studentView, setStudentView] = useState<StudentView>('home')
+  const [coachView,   setCoachView]   = useState<CoachView>('students')
 
   if (loading) {
     return (
@@ -29,6 +34,10 @@ export default function App() {
 
   const isCoach = profile.role !== 'student'
 
+  function handleStudentTab(tab: StudentTab) {
+    setStudentView(tab)
+  }
+
   return (
     <div className="min-h-screen bg-gray-950">
       {/* Header */}
@@ -40,11 +49,8 @@ export default function App() {
           <span className="text-white font-bold text-sm">Spelklar</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-gray-500 text-xs">{profile.full_name}</span>
-          <button
-            onClick={signOut}
-            className="text-gray-600 hover:text-white text-xs transition-colors"
-          >
+          <span className="text-gray-500 text-xs truncate max-w-[120px]">{profile.full_name}</span>
+          <button onClick={signOut} className="text-gray-600 hover:text-white text-xs transition-colors flex-shrink-0">
             Logga ut
           </button>
         </div>
@@ -53,31 +59,45 @@ export default function App() {
       {/* Content */}
       {isCoach ? (
         <>
-          {coachTab === 'students' && <CoachDashboard profile={profile} />}
-          {coachTab === 'schedule' && <SchedulePage profile={profile} />}
-          <BottomNav role="coach" tab={coachTab} onTab={setCoachTab} />
+          {coachView === 'students' && <CoachDashboard profile={profile} />}
+          {coachView === 'schedule' && <SchedulePage profile={profile} />}
+          {coachView === 'plan'     && <CoachPlanPage profile={profile} />}
+          <BottomNav role="coach" tab={coachView} onTab={setCoachView} />
         </>
       ) : (
         <>
-          {studentTab === 'home' && (
+          {studentView === 'home' && (
             <StudentHome
               profile={profile}
-              onCheckIn={() => setStudentTab('checkin')}
-              onInjury={() => setStudentTab('injury')}
-              onLoad={() => setStudentTab('load')}
+              onCheckIn={() => setStudentView('checkin')}
+              onInjury={()  => setStudentView('injury')}
+              onLoad={()    => setStudentView('load')}
             />
           )}
-          {studentTab === 'checkin' && (
-            <CheckInPage profile={profile} onDone={() => setStudentTab('home')} />
+          {studentView === 'checkin' && (
+            <CheckInPage profile={profile} onDone={() => setStudentView('home')} />
           )}
-          {studentTab === 'schedule' && <SchedulePage profile={profile} />}
-          {studentTab === 'load' && (
-            <TrainingLoadPage profile={profile} onDone={() => setStudentTab('home')} />
+          {studentView === 'schedule' && <SchedulePage profile={profile} />}
+          {studentView === 'log' && (
+            <LogPage
+              profile={profile}
+              onGoToLoad={()   => setStudentView('load')}
+              onGoToInjury={() => setStudentView('injury')}
+            />
           )}
-          {studentTab === 'injury' && (
-            <InjuryPage profile={profile} onDone={() => setStudentTab('home')} />
+          {studentView === 'load' && (
+            <TrainingLoadPage profile={profile} onDone={() => setStudentView('log')} />
           )}
-          <BottomNav role="student" tab={studentTab} onTab={setStudentTab} />
+          {studentView === 'injury' && (
+            <InjuryPage profile={profile} onDone={() => setStudentView('log')} />
+          )}
+          {studentView === 'profile' && <ProfilePage profile={profile} />}
+
+          <BottomNav
+            role="student"
+            tab={studentView}
+            onTab={handleStudentTab}
+          />
         </>
       )}
     </div>
