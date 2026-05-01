@@ -155,7 +155,7 @@ export function SchedulePage({ profile }: Props) {
     }).eq('id', editItem.id)
     setItems(prev => prev.map(i =>
       i.id === editItem.id
-        ? { ...i, title: editTitle, type: editType, date: editDate, start_time: editStart, end_time: editEnd || null, location: editLocation || null, notes: editNotes || null }
+        ? { ...i, title: editTitle, type: editType, date: editDate, start_time: editStart, end_time: editEnd || undefined, location: editLocation || undefined, notes: editNotes || undefined }
         : i
     ))
     setEditItem(null)
