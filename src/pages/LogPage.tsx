@@ -11,6 +11,8 @@ interface RehabCompletion { program_id: string; date: string }
 
 interface Props {
   profile: Profile
+  initialTab?: Tab
+  onTabChange?: (tab: Tab) => void
   onGoToLoad:   () => void
   onGoToInjury: () => void
   onGoToDiary:  () => void
@@ -25,8 +27,10 @@ const RPE_COLOR = (rpe: number) =>
 const RESULT_LABELS: Record<string, string> = { win: 'Vinst', loss: 'Förlust', draw: 'Oavgjort', no_result: '–' }
 const RESULT_COLORS: Record<string, string> = { win: 'text-green-400', loss: 'text-red-400', draw: 'text-yellow-400', no_result: 'text-gray-500' }
 
-export function LogPage({ profile, onGoToLoad, onGoToInjury, onGoToDiary, onGoToMatch }: Props) {
-  const [tab, setTab]                 = useState<Tab>('load')
+export function LogPage({ profile, initialTab, onTabChange, onGoToLoad, onGoToInjury, onGoToDiary, onGoToMatch }: Props) {
+  const [tab, setTabState]            = useState<Tab>(initialTab ?? 'load')
+
+  function setTab(t: Tab) { setTabState(t); onTabChange?.(t) }
   const [loads, setLoads]             = useState<LoadEntry[]>([])
   const [diary, setDiary]             = useState<DiaryPreview[]>([])
   const [matches, setMatches]         = useState<MatchPreview[]>([])

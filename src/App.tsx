@@ -24,6 +24,7 @@ export default function App() {
   const { user, profile, loading, signOut } = useAuth()
   const [studentView, setStudentView] = useState<StudentView>('home')
   const [coachView,   setCoachView]   = useState<CoachView>('students')
+  const [logTab, setLogTab] = useState<'load' | 'diary' | 'match' | 'injury'>('load')
 
   if (loading) {
     return (
@@ -85,6 +86,8 @@ export default function App() {
           {studentView === 'log' && (
             <LogPage
               profile={profile}
+              initialTab={logTab}
+              onTabChange={setLogTab}
               onGoToLoad={()   => setStudentView('load')}
               onGoToInjury={() => setStudentView('injury')}
               onGoToDiary={()  => setStudentView('diary')}
@@ -94,10 +97,10 @@ export default function App() {
           {studentView === 'diary'    && <DiaryPage    profile={profile} onBack={() => setStudentView('log')} />}
           {studentView === 'matchlog' && <MatchLogPage profile={profile} onBack={() => setStudentView('log')} />}
           {studentView === 'load' && (
-            <TrainingLoadPage profile={profile} onDone={() => setStudentView('log')} />
+            <TrainingLoadPage profile={profile} onDone={() => setStudentView('log')} onBack={() => setStudentView('log')} />
           )}
           {studentView === 'injury' && (
-            <InjuryPage profile={profile} onDone={() => setStudentView('log')} />
+            <InjuryPage profile={profile} onDone={() => setStudentView('log')} onBack={() => setStudentView('log')} />
           )}
           {studentView === 'profile' && <ProfilePage profile={profile} />}
 

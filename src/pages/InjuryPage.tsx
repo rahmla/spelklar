@@ -12,9 +12,10 @@ const BODY_PARTS = [
 interface Props {
   profile: Profile
   onDone: () => void
+  onBack: () => void
 }
 
-export function InjuryPage({ profile, onDone }: Props) {
+export function InjuryPage({ profile, onDone, onBack }: Props) {
   const [bodyPart, setBodyPart] = useState<string | null>(null)
   const [painLevel, setPainLevel] = useState(0)
   const [worsening, setWorsening] = useState<boolean | null>(null)
@@ -54,9 +55,14 @@ export function InjuryPage({ profile, onDone }: Props) {
 
   return (
     <div className="min-h-screen bg-gray-950 pb-24">
-      <div className="px-4 pt-6 pb-4">
-        <h1 className="text-white font-bold text-xl">Anmäl skada</h1>
-        <p className="text-gray-500 text-sm">Berätta för din tränare vad som gör ont</p>
+      <div className="px-4 pt-6 pb-4 flex items-center gap-3">
+        <button onClick={onBack} className="text-gray-400 hover:text-white transition-colors">
+          <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <div>
+          <h1 className="text-white font-bold text-xl">Anmäl skada</h1>
+          <p className="text-gray-500 text-sm">Berätta för din tränare vad som gör ont</p>
+        </div>
       </div>
 
       <div className="flex flex-col gap-4 px-4">

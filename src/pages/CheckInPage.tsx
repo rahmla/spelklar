@@ -66,7 +66,7 @@ export function CheckInPage({ profile, onDone }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-8">
+    <div className="min-h-screen bg-gray-950 pb-28">
       <div className="px-4 pt-6 pb-4">
         <h1 className="text-white font-bold text-xl">Morgonkoll</h1>
         <p className="text-gray-500 text-sm">{new Date().toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
