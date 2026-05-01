@@ -29,10 +29,10 @@ export function TrainingLoadPage({ profile, onDone, onBack }: Props) {
   async function loadPrevSessions() {
     const { data } = await supabase
       .from('training_load')
-      .select('session_title, created_at')
+      .select('session_title, date')
       .eq('user_id', profile.id)
       .not('session_title', 'is', null)
-      .order('created_at', { ascending: false })
+      .order('date', { ascending: false })
       .limit(50)
     const seen = new Set<string>()
     const unique: string[] = []

@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../types'
 
+// inverted: true means high raw value = bad (tiredness, stress, soreness)
+// We store 6-n so the DB value is always 1=best, 5=worst for those,
+// while the UI always shows 5=best, 1=worst for every question.
 const QUESTIONS = [
-  { key: 'sleep_quality',  label: 'Hur sov du?',               low: 'Dåligt', high: 'Superbra', type: 'scale' },
-  { key: 'tiredness',      label: 'Hur trött är du?',          low: 'Inte alls', high: 'Utmattad', type: 'scale' },
-  { key: 'stress',         label: 'Hur stressad är du?',       low: 'Lugn', high: 'Väldigt stressad', type: 'scale' },
-  { key: 'body_soreness',  label: 'Hur ont har du i kroppen?', low: 'Inget alls', high: 'Mycket ont', type: 'scale' },
-  { key: 'motivation',     label: 'Hur motiverad är du?',      low: 'Inte alls', high: 'Pumpat', type: 'scale' },
+  { key: 'sleep_quality', label: 'Hur sov du?',               low: 'Dåligt',           high: 'Superbra',         inverted: false },
+  { key: 'tiredness',     label: 'Hur trött är du?',          low: 'Utmattad',          high: 'Pigg & fräsch',    inverted: true  },
+  { key: 'stress',        label: 'Hur stressad är du?',       low: 'Väldigt stressad',  high: 'Helt lugn',        inverted: true  },
+  { key: 'body_soreness', label: 'Hur ont har du i kroppen?', low: 'Mycket ont',        high: 'Kroppen ok',       inverted: true  },
+  { key: 'motivation',    label: 'Hur motiverad är du?',      low: 'Inte alls',         high: 'Pumpat!',          inverted: false },
 ] as const
 
 type ScaleKey = typeof QUESTIONS[number]['key']
@@ -73,31 +76,43 @@ export function CheckInPage({ profile, onDone }: Props) {
       </div>
 
       <div className="flex flex-col gap-4 px-4">
-        {QUESTIONS.map(q => (
-          <div key={q.key} className="bg-gray-900 rounded-2xl p-4">
-            <p className="text-white font-medium text-sm mb-3">{q.label}</p>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4, 5].map(n => (
-                <button
-                  key={n}
-                  onClick={() => setValues(v => ({ ...v, [q.key]: n }))}
-                  className={[
-                    'flex-1 h-11 rounded-xl text-sm font-bold transition-colors',
-                    values[q.key] === n
-                      ? 'bg-green-500 text-white'
-                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700',
-                  ].join(' ')}
-                >
-                  {n}
-                </button>
-              ))}
+        {QUESTIONS.map(q => {
+          // For inverted questions: clicking button n (1-5) stores 6-n in DB.
+          // The readiness algorithm already accounts for this (uses 6-tiredness etc.)
+          // UI: 1=worst (left), 5=best (right) for ALL questions.
+          const storedVal = values[q.key]
+          // Convert stored DB value back to the UI button that should appear selected
+          const selectedBtn = storedVal === 0 ? 0 : q.inverted ? 6 - storedVal : storedVal
+
+          return (
+            <div key={q.key} className="bg-gray-900 rounded-2xl p-4">
+              <p className="text-white font-medium text-sm mb-3">{q.label}</p>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map(n => {
+                  const dbValue = q.inverted ? 6 - n : n
+                  const isSelected = selectedBtn === n
+                  const color = n <= 1 ? 'bg-red-500' : n <= 2 ? 'bg-orange-500' : n <= 3 ? 'bg-yellow-500' : n <= 4 ? 'bg-lime-500' : 'bg-green-500'
+                  return (
+                    <button
+                      key={n}
+                      onClick={() => setValues(v => ({ ...v, [q.key]: dbValue }))}
+                      className={[
+                        'flex-1 h-11 rounded-xl text-sm font-bold transition-colors',
+                        isSelected ? `${color} text-white` : 'bg-gray-800 text-gray-400 hover:bg-gray-700',
+                      ].join(' ')}
+                    >
+                      {n}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="flex justify-between mt-1.5">
+                <span className="text-xs text-gray-600">{q.low}</span>
+                <span className="text-xs text-gray-600">{q.high}</span>
+              </div>
             </div>
-            <div className="flex justify-between mt-1.5">
-              <span className="text-xs text-gray-600">{q.low}</span>
-              <span className="text-xs text-gray-600">{q.high}</span>
-            </div>
-          </div>
-        ))}
+          )
+        })}
 
         {/* Yes/No questions */}
         {[
@@ -124,7 +139,7 @@ export function CheckInPage({ profile, onDone }: Props) {
                 className={[
                   'flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors',
                   q.value === false
-                    ? q.yesRed ? 'bg-green-500 text-white' : 'bg-gray-800 text-white'
+                    ? q.yesRed ? 'bg-green-500 text-white' : 'bg-green-500 text-white'
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700',
                 ].join(' ')}
               >

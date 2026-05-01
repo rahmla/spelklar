@@ -66,6 +66,21 @@ function addDays(dateStr: string, days: number): string {
   return d.toISOString().split('T')[0]
 }
 
+// Count weeks between two dates (rounded up)
+function weeksBetween(from: string, to: string): number {
+  const ms = new Date(to + 'T00:00:00').getTime() - new Date(from + 'T00:00:00').getTime()
+  return Math.max(1, Math.ceil(ms / (7 * 86400000)) + 1)
+}
+
+// Get next Monday from today
+function nextMonday(): string {
+  const d = new Date()
+  const day = d.getDay()
+  const diff = day === 0 ? 1 : 8 - day
+  d.setDate(d.getDate() + diff)
+  return d.toISOString().split('T')[0]
+}
+
 export function SchedulePage({ profile }: Props) {
   const [items, setItems]               = useState<ScheduleItem[]>([])
   const [attendance, setAttendance]     = useState<AttendanceRecord[]>([])
@@ -84,7 +99,7 @@ export function SchedulePage({ profile }: Props) {
   const [formLocation, setFormLocation]   = useState('')
   const [formNotes, setFormNotes]         = useState('')
   const [formRecurring, setFormRecurring] = useState(false)
-  const [formWeeks, setFormWeeks]         = useState(12)
+  const [formUntil, setFormUntil]         = useState(nextMonday)
   const [saving, setSaving]               = useState(false)
 
   useEffect(() => { load() }, [])
@@ -103,10 +118,16 @@ export function SchedulePage({ profile }: Props) {
 
   async function markAttendance(scheduleItemId: string, status: string) {
     setSavingAttend(scheduleItemId)
-    await supabase.from('attendance').upsert({ schedule_item_id: scheduleItemId, user_id: profile.id, status })
+    await supabase.from('attendance').upsert(
+      { schedule_item_id: scheduleItemId, user_id: profile.id, status },
+      { onConflict: 'schedule_item_id,user_id' }
+    )
+    setAttendance(prev => {
+      const without = prev.filter(a => a.schedule_item_id !== scheduleItemId)
+      return [...without, { schedule_item_id: scheduleItemId, status }]
+    })
     setEditingAttend(null)
     setSavingAttend(null)
-    load()
   }
 
   async function handleAddItem() {
@@ -123,10 +144,11 @@ export function SchedulePage({ profile }: Props) {
       created_by: profile.id,
     }
     if (formRecurring) {
-      const inserts = Array.from({ length: formWeeks }, (_, i) => ({
+      const weeks = weeksBetween(formDate, formUntil)
+      const inserts = Array.from({ length: weeks }, (_, i) => ({
         ...base,
         date: addDays(formDate, i * 7),
-      }))
+      })).filter(row => row.date <= formUntil)
       await supabase.from('schedule_items').insert(inserts)
     } else {
       await supabase.from('schedule_items').insert({ ...base, date: formDate })
@@ -134,13 +156,13 @@ export function SchedulePage({ profile }: Props) {
     setFormTitle(''); setFormType('training')
     setFormDate(new Date().toISOString().split('T')[0])
     setFormStart('08:00'); setFormEnd(''); setFormLocation(''); setFormNotes('')
-    setFormRecurring(false); setFormWeeks(12)
+    setFormRecurring(false)
     setShowForm(false); setSaving(false)
     load()
   }
 
   const today     = new Date().toISOString().split('T')[0]
-  const cutoff    = addDays(today, -1) // hide items older than yesterday
+  const cutoff    = addDays(today, -1)
   const attendMap = new Map(attendance.map(a => [a.schedule_item_id, a.status]))
 
   const currentItems  = items.filter(i => i.date >= cutoff)
@@ -203,10 +225,10 @@ export function SchedulePage({ profile }: Props) {
                           disabled={isSaving}
                           className={[
                             'px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50',
-                            currentStatus === opt.value ? opt.active : 'bg-gray-800 text-gray-400',
+                            currentStatus === opt.value && !isEditing ? opt.active : 'bg-gray-800 text-gray-400 hover:bg-gray-700',
                           ].join(' ')}
                         >
-                          {isSaving && currentStatus === opt.value ? '…' : opt.label}
+                          {isSaving ? '…' : opt.label}
                         </button>
                       ))}
                       {isEditing && (
@@ -227,6 +249,8 @@ export function SchedulePage({ profile }: Props) {
       </div>
     )
   }
+
+  const recurringWeekCount = formRecurring ? weeksBetween(formDate, formUntil) : 0
 
   return (
     <div className="min-h-screen bg-gray-950 pb-24">
@@ -280,36 +304,44 @@ export function SchedulePage({ profile }: Props) {
             placeholder="Anteckningar (valfritt)"
             className="bg-gray-800 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none placeholder-gray-600 resize-none" />
 
-          {/* Recurring */}
-          <div className="flex items-center gap-3">
-            <button
+          {/* Recurring toggle */}
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <div
               onClick={() => setFormRecurring(v => !v)}
-              className={['w-10 h-6 rounded-full transition-colors relative flex-shrink-0',
-                formRecurring ? 'bg-green-500' : 'bg-gray-700'].join(' ')}
+              className={[
+                'relative w-12 h-6 rounded-full transition-colors duration-200 flex-shrink-0',
+                formRecurring ? 'bg-green-500' : 'bg-gray-700',
+              ].join(' ')}
             >
-              <span className={['absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform',
-                formRecurring ? 'translate-x-4' : 'translate-x-0.5'].join(' ')} />
-            </button>
+              <span className={[
+                'absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200',
+                formRecurring ? 'translate-x-6' : 'translate-x-0',
+              ].join(' ')} />
+            </div>
             <span className="text-white text-sm">Upprepa varje vecka</span>
-          </div>
+          </label>
+
           {formRecurring && (
-            <div className="flex items-center gap-3">
-              <p className="text-gray-500 text-sm">Antal veckor:</p>
-              <div className="flex gap-2">
-                {[4, 8, 12, 20].map(w => (
-                  <button key={w} onClick={() => setFormWeeks(w)}
-                    className={['px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
-                      formWeeks === w ? 'bg-green-500 text-white' : 'bg-gray-800 text-gray-400'].join(' ')}>
-                    {w}v
-                  </button>
-                ))}
+            <div className="bg-gray-800 rounded-xl p-3 flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <p className="text-gray-400 text-sm flex-shrink-0">Upprepa till:</p>
+                <input
+                  type="date"
+                  value={formUntil}
+                  min={addDays(formDate, 7)}
+                  onChange={e => setFormUntil(e.target.value)}
+                  className="flex-1 bg-gray-700 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none"
+                />
               </div>
+              <p className="text-gray-500 text-xs">
+                Skapar {recurringWeekCount} tillfällen — {formDate} t.o.m. {formUntil}
+              </p>
             </div>
           )}
 
           <button onClick={handleAddItem} disabled={!formTitle || saving}
             className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-400 disabled:opacity-40 text-white font-bold text-sm transition-colors">
-            {saving ? 'Sparar…' : formRecurring ? `Spara (${formWeeks} veckor)` : 'Spara'}
+            {saving ? 'Sparar…' : formRecurring ? `Spara (${recurringWeekCount} tillfällen)` : 'Spara'}
           </button>
         </div>
       )}
@@ -338,13 +370,22 @@ export function SchedulePage({ profile }: Props) {
 
           {/* History collapsible */}
           {historicItems.length > 0 && (
-            <div className="mt-4">
+            <div className="mt-4 border-t border-gray-800 pt-2">
               <button
                 onClick={() => setShowHistory(v => !v)}
-                className="w-full flex items-center justify-between py-3 text-gray-500 text-sm font-medium"
+                className="w-full flex items-center justify-between px-1 py-3 text-sm font-medium"
               >
-                <span>Historik ({historicItems.length} pass)</span>
-                <span>{showHistory ? '▲' : '▼'}</span>
+                <span className="text-gray-400 font-semibold">
+                  Historik
+                  <span className="ml-2 text-gray-600 font-normal text-xs">({historicItems.length} pass)</span>
+                </span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className={['w-5 h-5 text-gray-500 transition-transform duration-200', showHistory ? 'rotate-180' : ''].join(' ')}
+                >
+                  <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+                </svg>
               </button>
               {showHistory && (
                 <div className="flex flex-col gap-1">
