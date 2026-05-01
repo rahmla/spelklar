@@ -66,13 +66,11 @@ function addDays(dateStr: string, days: number): string {
   return d.toISOString().split('T')[0]
 }
 
-// Count weeks between two dates (rounded up)
 function weeksBetween(from: string, to: string): number {
   const ms = new Date(to + 'T00:00:00').getTime() - new Date(from + 'T00:00:00').getTime()
   return Math.max(1, Math.ceil(ms / (7 * 86400000)) + 1)
 }
 
-// Get next Monday from today
 function nextMonday(): string {
   const d = new Date()
   const day = d.getDay()
@@ -90,7 +88,7 @@ export function SchedulePage({ profile }: Props) {
   const [savingAttend, setSavingAttend] = useState<string | null>(null)
   const [editingAttend, setEditingAttend] = useState<string | null>(null)
 
-  // Form state
+  // Add form
   const [formTitle, setFormTitle]         = useState('')
   const [formType, setFormType]           = useState<ScheduleType>('training')
   const [formDate, setFormDate]           = useState(new Date().toISOString().split('T')[0])
@@ -101,6 +99,18 @@ export function SchedulePage({ profile }: Props) {
   const [formRecurring, setFormRecurring] = useState(false)
   const [formUntil, setFormUntil]         = useState(nextMonday)
   const [saving, setSaving]               = useState(false)
+
+  // Edit item
+  const [editItem, setEditItem]       = useState<ScheduleItem | null>(null)
+  const [editTitle, setEditTitle]     = useState('')
+  const [editType, setEditType]       = useState<ScheduleType>('training')
+  const [editDate, setEditDate]       = useState('')
+  const [editStart, setEditStart]     = useState('')
+  const [editEnd, setEditEnd]         = useState('')
+  const [editLocation, setEditLocation] = useState('')
+  const [editNotes, setEditNotes]     = useState('')
+  const [savingEdit, setSavingEdit]   = useState(false)
+  const [deletingId, setDeletingId]   = useState<string | null>(null)
 
   useEffect(() => { load() }, [])
 
@@ -114,6 +124,49 @@ export function SchedulePage({ profile }: Props) {
     setItems(scheduleData ?? [])
     setAttendance(attendData ?? [])
     setLoading(false)
+  }
+
+  function startEdit(item: ScheduleItem) {
+    setEditItem(item)
+    setEditTitle(item.title)
+    setEditType(item.type as ScheduleType)
+    setEditDate(item.date)
+    setEditStart(item.start_time?.slice(0, 5) ?? '')
+    setEditEnd(item.end_time?.slice(0, 5) ?? '')
+    setEditLocation(item.location ?? '')
+    setEditNotes(item.notes ?? '')
+  }
+
+  function cancelEdit() {
+    setEditItem(null)
+  }
+
+  async function handleSaveEdit() {
+    if (!editItem || !editTitle || !editDate || !editStart) return
+    setSavingEdit(true)
+    await supabase.from('schedule_items').update({
+      title: editTitle,
+      type: editType,
+      date: editDate,
+      start_time: editStart,
+      end_time: editEnd || null,
+      location: editLocation || null,
+      notes: editNotes || null,
+    }).eq('id', editItem.id)
+    setItems(prev => prev.map(i =>
+      i.id === editItem.id
+        ? { ...i, title: editTitle, type: editType, date: editDate, start_time: editStart, end_time: editEnd || null, location: editLocation || null, notes: editNotes || null }
+        : i
+    ))
+    setEditItem(null)
+    setSavingEdit(false)
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id)
+    await supabase.from('schedule_items').delete().eq('id', id)
+    setItems(prev => prev.filter(i => i.id !== id))
+    setDeletingId(null)
   }
 
   async function markAttendance(scheduleItemId: string, status: string) {
@@ -164,6 +217,7 @@ export function SchedulePage({ profile }: Props) {
   const today     = new Date().toISOString().split('T')[0]
   const cutoff    = addDays(today, -1)
   const attendMap = new Map(attendance.map(a => [a.schedule_item_id, a.status]))
+  const isCoach   = isCoachRole(profile.role)
 
   const currentItems  = items.filter(i => i.date >= cutoff)
   const historicItems = items.filter(i => i.date <  cutoff)
@@ -176,21 +230,92 @@ export function SchedulePage({ profile }: Props) {
   function renderItem(item: ScheduleItem) {
     const cfg           = SCHEDULE_CONFIG[item.type as ScheduleType] ?? SCHEDULE_CONFIG.training
     const isPast        = item.date <= today
-    const needAttend    = !isCoachRole(profile.role) && attendanceTypes.has(item.type) && isPast
+    const needAttend    = !isCoach && attendanceTypes.has(item.type) && isPast
     const currentStatus = attendMap.get(item.id)
     const isEditing     = editingAttend === item.id
-    const isSaving      = savingAttend === item.id
+    const isSavingAtt   = savingAttend === item.id
+    const isDeleting    = deletingId === item.id
+
+    // Inline edit form for coaches
+    if (isCoach && editItem?.id === item.id) {
+      return (
+        <div key={item.id} className="bg-gray-900 rounded-2xl p-4 flex flex-col gap-3 border border-green-700/40">
+          <div className="flex items-center justify-between">
+            <p className="text-white font-semibold text-sm">Redigera pass</p>
+            <button onClick={cancelEdit} className="text-gray-500 hover:text-white text-xs">Avbryt</button>
+          </div>
+          <input type="text" value={editTitle} onChange={e => setEditTitle(e.target.value)}
+            placeholder="Titel"
+            className="bg-gray-800 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-600" />
+          <div className="grid grid-cols-2 gap-3">
+            <select value={editType} onChange={e => setEditType(e.target.value as ScheduleType)}
+              className="bg-gray-800 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none">
+              {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)}
+              className="bg-gray-800 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-gray-500 text-xs mb-1">Starttid</p>
+              <input type="time" value={editStart} onChange={e => setEditStart(e.target.value)}
+                className="w-full bg-gray-800 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none" />
+            </div>
+            <div>
+              <p className="text-gray-500 text-xs mb-1">Sluttid (valfritt)</p>
+              <input type="time" value={editEnd} onChange={e => setEditEnd(e.target.value)}
+                className="w-full bg-gray-800 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none" />
+            </div>
+          </div>
+          <input type="text" value={editLocation} onChange={e => setEditLocation(e.target.value)}
+            placeholder="Plats (valfritt)"
+            className="bg-gray-800 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none placeholder-gray-600" />
+          <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2}
+            placeholder="Anteckningar (valfritt)"
+            className="bg-gray-800 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none placeholder-gray-600 resize-none" />
+          <button onClick={handleSaveEdit} disabled={!editTitle || savingEdit}
+            className="w-full py-2.5 rounded-xl bg-green-500 hover:bg-green-400 disabled:opacity-40 text-white font-bold text-sm transition-colors">
+            {savingEdit ? 'Sparar…' : 'Spara ändringar'}
+          </button>
+        </div>
+      )
+    }
 
     return (
-      <div key={item.id} className={`rounded-2xl border p-4 ${cfg.color}`}>
+      <div key={item.id} className={`rounded-2xl border p-4 ${cfg.color} ${isDeleting ? 'opacity-40' : ''}`}>
         <div className="flex items-start gap-3">
           <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${cfg.dot}`} />
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-start justify-between gap-2">
               <p className="text-white font-semibold text-sm">{item.title}</p>
-              <p className="text-gray-400 text-xs flex-shrink-0">
-                {item.start_time.slice(0, 5)}{item.end_time && `–${item.end_time.slice(0, 5)}`}
-              </p>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <p className="text-gray-400 text-xs">
+                  {item.start_time.slice(0, 5)}{item.end_time && `–${item.end_time.slice(0, 5)}`}
+                </p>
+                {isCoach && (
+                  <>
+                    <button
+                      onClick={() => startEdit(item)}
+                      className="text-gray-600 hover:text-green-400 transition-colors"
+                      title="Redigera"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      disabled={isDeleting}
+                      className="text-gray-600 hover:text-red-400 transition-colors disabled:opacity-40"
+                      title="Ta bort"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                      </svg>
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <span className="text-xs text-gray-500">{cfg.label}</span>
@@ -222,13 +347,13 @@ export function SchedulePage({ profile }: Props) {
                         <button
                           key={opt.value}
                           onClick={() => markAttendance(item.id, opt.value)}
-                          disabled={isSaving}
+                          disabled={isSavingAtt}
                           className={[
                             'px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50',
                             currentStatus === opt.value && !isEditing ? opt.active : 'bg-gray-800 text-gray-400 hover:bg-gray-700',
                           ].join(' ')}
                         >
-                          {isSaving ? '…' : opt.label}
+                          {isSavingAtt ? '…' : opt.label}
                         </button>
                       ))}
                       {isEditing && (
@@ -259,9 +384,9 @@ export function SchedulePage({ profile }: Props) {
           <h1 className="text-white font-bold text-xl">Schema</h1>
           <p className="text-gray-500 text-sm">Kommande pass och aktiviteter</p>
         </div>
-        {isCoachRole(profile.role) && (
+        {isCoach && (
           <button
-            onClick={() => setShowForm(v => !v)}
+            onClick={() => { setShowForm(v => !v); setEditItem(null) }}
             className={['px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
               showForm ? 'bg-gray-700 text-white' : 'bg-green-500 text-white'].join(' ')}
           >
@@ -271,7 +396,7 @@ export function SchedulePage({ profile }: Props) {
       </div>
 
       {/* Coach add form */}
-      {showForm && isCoachRole(profile.role) && (
+      {showForm && isCoach && (
         <div className="mx-4 mb-4 bg-gray-900 rounded-2xl p-4 flex flex-col gap-3">
           <p className="text-white font-semibold text-sm">Nytt schema-inlägg</p>
           <input type="text" value={formTitle} onChange={e => setFormTitle(e.target.value)}
@@ -304,19 +429,14 @@ export function SchedulePage({ profile }: Props) {
             placeholder="Anteckningar (valfritt)"
             className="bg-gray-800 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none placeholder-gray-600 resize-none" />
 
-          {/* Recurring toggle */}
           <label className="flex items-center gap-3 cursor-pointer select-none">
             <div
               onClick={() => setFormRecurring(v => !v)}
-              className={[
-                'relative w-12 h-6 rounded-full transition-colors duration-200 flex-shrink-0',
-                formRecurring ? 'bg-green-500' : 'bg-gray-700',
-              ].join(' ')}
+              className={['relative w-12 h-6 rounded-full transition-colors duration-200 flex-shrink-0',
+                formRecurring ? 'bg-green-500' : 'bg-gray-700'].join(' ')}
             >
-              <span className={[
-                'absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200',
-                formRecurring ? 'translate-x-6' : 'translate-x-0',
-              ].join(' ')} />
+              <span className={['absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200',
+                formRecurring ? 'translate-x-6' : 'translate-x-0'].join(' ')} />
             </div>
             <span className="text-white text-sm">Upprepa varje vecka</span>
           </label>
@@ -325,13 +445,9 @@ export function SchedulePage({ profile }: Props) {
             <div className="bg-gray-800 rounded-xl p-3 flex flex-col gap-2">
               <div className="flex items-center gap-3">
                 <p className="text-gray-400 text-sm flex-shrink-0">Upprepa till:</p>
-                <input
-                  type="date"
-                  value={formUntil}
-                  min={addDays(formDate, 7)}
+                <input type="date" value={formUntil} min={addDays(formDate, 7)}
                   onChange={e => setFormUntil(e.target.value)}
-                  className="flex-1 bg-gray-700 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none"
-                />
+                  className="flex-1 bg-gray-700 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
               </div>
               <p className="text-gray-500 text-xs">
                 Skapar {recurringWeekCount} tillfällen — {formDate} t.o.m. {formUntil}
@@ -352,7 +468,6 @@ export function SchedulePage({ profile }: Props) {
         </div>
       ) : (
         <div className="flex flex-col gap-1 px-4">
-          {/* Current & upcoming */}
           {currentDates.length === 0 ? (
             <p className="text-gray-600 text-sm text-center pt-8">Inga kommande aktiviteter</p>
           ) : (
@@ -368,7 +483,6 @@ export function SchedulePage({ profile }: Props) {
             ))
           )}
 
-          {/* History collapsible */}
           {historicItems.length > 0 && (
             <div className="mt-4 border-t border-gray-800 pt-2">
               <button
@@ -379,11 +493,8 @@ export function SchedulePage({ profile }: Props) {
                   Historik
                   <span className="ml-2 text-gray-600 font-normal text-xs">({historicItems.length} pass)</span>
                 </span>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className={['w-5 h-5 text-gray-500 transition-transform duration-200', showHistory ? 'rotate-180' : ''].join(' ')}
-                >
+                <svg viewBox="0 0 24 24" fill="currentColor"
+                  className={['w-5 h-5 text-gray-500 transition-transform duration-200', showHistory ? 'rotate-180' : ''].join(' ')}>
                   <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
                 </svg>
               </button>
