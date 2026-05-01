@@ -33,7 +33,7 @@ const COACH_TABS: { id: CoachTab; label: string; icon: keyof typeof Icons }[] = 
   { id: 'weekly',   label: 'Vecka',   icon: 'chart' },
 ]
 
-interface StudentProps { role: 'student'; tab: StudentTab | 'load' | 'injury'; onTab: (t: StudentTab) => void }
+interface StudentProps { role: 'student'; tab: StudentTab | 'load' | 'injury' | 'diary' | 'matchlog'; onTab: (t: StudentTab) => void }
 interface CoachProps   { role: 'coach';   tab: CoachTab;                         onTab: (t: CoachTab) => void }
 type Props = StudentProps | CoachProps
 
@@ -42,7 +42,7 @@ export function BottomNav(props: Props) {
 
   function activeTab(tabId: string) {
     if (props.role === 'student') {
-      const cur = props.tab
+      const cur: string = props.tab
       if (cur === 'load' || cur === 'injury' || cur === 'diary' || cur === 'matchlog') return tabId === 'log'
       return tabId === cur
     }
