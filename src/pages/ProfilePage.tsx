@@ -28,6 +28,8 @@ const GOAL_TYPES = [
 
 export function ProfilePage({ profile }: Props) {
   const [checkins, setCheckins]       = useState<CheckIn[]>([])
+  const [weekLoad, setWeekLoad]       = useState(0)
+  const [weekSessions, setWeekSessions] = useState(0)
   const [goals, setGoals]             = useState<Goal[]>([])
   const [streak, setStreak]           = useState(0)
   const [loading, setLoading]         = useState(true)
@@ -41,10 +43,19 @@ export function ProfilePage({ profile }: Props) {
 
   async function load() {
     const since = new Date(Date.now() - 28 * 86400000).toISOString().split('T')[0]
-    const [{ data: ci }, { data: g }] = await Promise.all([
+    const monday = (() => {
+      const d = new Date(); const day = d.getDay()
+      d.setDate(d.getDate() - (day === 0 ? 6 : day - 1)); return d.toISOString().split('T')[0]
+    })()
+
+    const [{ data: ci }, { data: g }, { data: lo }] = await Promise.all([
       supabase.from('checkins').select('*').eq('user_id', profile.id).gte('date', since).order('date', { ascending: false }),
       supabase.from('goals').select('*').eq('user_id', profile.id).order('created_at', { ascending: false }),
+      supabase.from('training_load').select('rpe,duration_minutes').eq('user_id', profile.id).gte('date', monday),
     ])
+
+    setWeekLoad((lo ?? []).reduce((s, l) => s + l.rpe * l.duration_minutes, 0))
+    setWeekSessions((lo ?? []).length)
     const allCi = ci ?? []
     setCheckins(allCi)
     setGoals(g ?? [])
@@ -128,6 +139,54 @@ export function ProfilePage({ profile }: Props) {
         </div>
       ) : (
         <div className="flex flex-col gap-4 px-4">
+
+          {/* Weekly report */}
+          {(() => {
+            const today = new Date().toISOString().split('T')[0]
+            const monday = (() => {
+              const d = new Date(); const day = d.getDay()
+              d.setDate(d.getDate() - (day === 0 ? 6 : day - 1)); return d.toISOString().split('T')[0]
+            })()
+            const weekCheckins = checkins.filter(c => c.date >= monday && c.date <= today)
+            const daysElapsed  = Math.min(new Date().getDay() === 0 ? 7 : new Date().getDay(), 7)
+            const compliance   = daysElapsed > 0 ? Math.round((weekCheckins.length / daysElapsed) * 100) : 0
+            const avgSleep     = weekCheckins.length > 0
+              ? (weekCheckins.reduce((s, c) => s + c.sleep_quality, 0) / weekCheckins.length).toFixed(1)
+              : null
+            const colors = weekCheckins.map(c => getReadinessColor(c))
+            const dominant = ['green','yellow','red'].find(col => colors.filter(c => c === col).length >= colors.length / 2) ?? (weekCheckins.length > 0 ? colors[0] : null)
+            const domColor = dominant === 'green' ? 'text-green-400' : dominant === 'yellow' ? 'text-yellow-400' : dominant === 'red' ? 'text-red-400' : 'text-gray-500'
+
+            return (
+              <div className="bg-gray-900 rounded-2xl p-4">
+                <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-3">Veckans rapport</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-800 rounded-xl p-3 text-center">
+                    <p className={`text-xl font-black ${compliance >= 70 ? 'text-green-400' : compliance >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{compliance}%</p>
+                    <p className="text-gray-500 text-xs">Check-ins</p>
+                    <p className="text-gray-600 text-[10px]">{weekCheckins.length}/{daysElapsed} dagar</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-xl p-3 text-center">
+                    <p className={`text-xl font-black ${domColor}`}>
+                      {dominant === 'green' ? 'Grön' : dominant === 'yellow' ? 'Gul' : dominant === 'red' ? 'Röd' : '–'}
+                    </p>
+                    <p className="text-gray-500 text-xs">Beredskap</p>
+                    <p className="text-gray-600 text-[10px]">vanligast</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-xl p-3 text-center">
+                    <p className="text-xl font-black text-orange-400">{weekLoad > 0 ? weekLoad : '–'}</p>
+                    <p className="text-gray-500 text-xs">Belastn.</p>
+                    <p className="text-gray-600 text-[10px]">{weekSessions} pass</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-xl p-3 text-center">
+                    <p className="text-xl font-black text-blue-400">{avgSleep ?? '–'}</p>
+                    <p className="text-gray-500 text-xs">Snitt sömn</p>
+                    <p className="text-gray-600 text-[10px]">av 5</p>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Streak */}
           <div className="bg-gray-900 rounded-2xl p-4 flex items-center gap-3">

@@ -10,11 +10,14 @@ import { TrainingLoadPage } from './pages/TrainingLoadPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { CoachDashboard } from './pages/CoachDashboard'
 import { CoachPlanPage } from './pages/CoachPlanPage'
+import { CoachWeeklyPage } from './pages/CoachWeeklyPage'
+import { DiaryPage } from './pages/DiaryPage'
+import { MatchLogPage } from './pages/MatchLogPage'
 import { BottomNav } from './components/BottomNav'
 import type { StudentTab, CoachTab } from './components/BottomNav'
 
 // Students can also be in sub-views 'load' or 'injury' (no tab)
-type StudentView = StudentTab | 'load' | 'injury'
+type StudentView = StudentTab | 'load' | 'injury' | 'diary' | 'matchlog'
 type CoachView   = CoachTab
 
 export default function App() {
@@ -62,6 +65,7 @@ export default function App() {
           {coachView === 'students' && <CoachDashboard profile={profile} />}
           {coachView === 'schedule' && <SchedulePage profile={profile} />}
           {coachView === 'plan'     && <CoachPlanPage profile={profile} />}
+          {coachView === 'weekly'   && <CoachWeeklyPage profile={profile} />}
           <BottomNav role="coach" tab={coachView} onTab={setCoachView} />
         </>
       ) : (
@@ -83,8 +87,12 @@ export default function App() {
               profile={profile}
               onGoToLoad={()   => setStudentView('load')}
               onGoToInjury={() => setStudentView('injury')}
+              onGoToDiary={()  => setStudentView('diary')}
+              onGoToMatch={()  => setStudentView('matchlog')}
             />
           )}
+          {studentView === 'diary'    && <DiaryPage    profile={profile} onBack={() => setStudentView('log')} />}
+          {studentView === 'matchlog' && <MatchLogPage profile={profile} onBack={() => setStudentView('log')} />}
           {studentView === 'load' && (
             <TrainingLoadPage profile={profile} onDone={() => setStudentView('log')} />
           )}
